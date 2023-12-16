@@ -1,5 +1,7 @@
 import struct
 import os
+import tkinter as tk
+from tkinter import filedialog, simpledialog
 
 class ISO9660Reader:
     def __init__(self, iso_path):
@@ -136,8 +138,15 @@ class ISO9660Reader:
         root_extent = self.parse_volume_descriptor()
         records = self.parse_directory(root_extent)
 
+        # Normalize file path for case-insensitive comparison
+        file_path = os.path.normpath(file_path)
+
         for record in records:
-            if os.fsdecode(record[7]) == file_path:
+            # Normalize directory entry for case-insensitive comparison
+            entry_path = os.fsdecode(record[7]).strip('\0')
+            entry_path = os.path.normpath(entry_path)
+
+            if entry_path.lower() == file_path.lower():
                 if record[1] & 0x02:
                     print("Error: Specified path is a directory. Use 'list_contents' to view its contents.")
                     return
@@ -153,40 +162,47 @@ class ISO9660Reader:
                                 iso_file.seek(data_extent)
                                 data = iso_file.read(record[4])
                                 output_file.write(data)
-                        print(f"\nFile '{os.fsdecode(file_path)}' extracted successfully to '{destination_path}'.")
+                        print(f"\nFile '{entry_path}' extracted successfully to '{destination_path}'.")
                         return
                     else:
                         # Print file data
                         with open(self.iso_path, 'rb') as iso_file:
                             iso_file.seek(data_extent)
                             data = iso_file.read(record[4])
-                            print(f"\nFile '{os.fsdecode(file_path)}' content:")
+                            print(f"\nFile '{entry_path}' content:")
                             print(data)
-        print(f"Error: File '{os.fsdecode(file_path)}' not found.")
 
-if __name__ == "__main__":
-    iso_path = "/iso/file.iso"
-    print("Current Working Directory:", os.getcwd())
-    print("Is file exists:", os.path.exists(iso_path))  # Check if the file exists
-    # Provide the full path to the ISO9660Reader constructor
-    iso_reader = ISO9660Reader(iso_path)
+        print(f"Error: File '{file_path}' not found.")
 
-    # Print volume descriptors
-    iso_reader.print_volume_descriptor("Standard", iso_reader.read_volume_descriptor(16 * 2048))
-    iso_reader.print_volume_descriptor("Joliet", iso_reader.read_volume_descriptor(17 * 2048))
+    @classmethod
+    def select_iso_file(cls):
+        # Create a Tkinter root window (hidden)
+        root = tk.Tk()
+        root.withdraw()  # Hide the main window
 
+        # Ask the user to select an ISO file using a file dialog
+        iso_path = filedialog.askopenfilename(title="Select ISO File", filetypes=[("ISO files", "*.iso")])
 
-    # Provide the full path to the ISO9660Reader constructor
-    iso_reader = ISO9660Reader(iso_path)
+        # Check if the user selected a file
+        if not iso_path:
+            print("No file selected. Exiting.")
+            exit()
 
-    # List all files and directories in the root directory
-    iso_reader.list_contents("")
+        print("Selected ISO Path:", iso_path)
 
-    # List contents of a specific directory
-    iso_reader.list_contents("path/to/your/directory")
+        # Provide the selected ISO path to the ISO9660Reader constructor
+        return cls(iso_path)
 
-    # Extract a file from the ISO to the current directory
-    iso_reader.extract_file(file_path="/iso/file.txt",
-                            destination="path/on/local/machine")
+    @classmethod
+    def select_file(cls):
+        # Ask the user to select a file using a file dialog
+        file_path = filedialog.askopenfilename(title="Select File")
 
-    print(f"ISO Path: {iso_reader.iso_path}")
+        # Check if the user selected a file
+        if not file_path:
+            print("No file selected. Exiting.")
+            exit()
+
+        print("Selected File Path:", file_path)
+
+        return file_path
