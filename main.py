@@ -186,7 +186,7 @@ if __name__ == "__main__":
     iso_reader.list_contents("path/to/your/directory")
 
     # Extract a file from the ISO to the current directory
-    iso_reader.extract_file(file_path="path/inside/iso/file.txt",
+    iso_reader.extract_file(file_path="/iso/file.txt",
                             destination="path/on/local/machine")
 
     print(f"ISO Path: {iso_reader.iso_path}")
