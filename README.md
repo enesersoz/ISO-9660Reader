@@ -11,8 +11,6 @@ iso_path = "/path/to/your/file.iso"
 iso_reader = ISO9660Reader(iso_path)
 Print Volume Descriptors: Display information about the standard and Joliet volume descriptors.
 
-python
-Copy code
 iso_reader.print_volume_descriptor("Standard", iso_reader.read_volume_descriptor(16 * 2048))
 iso_reader.print_volume_descriptor("Joliet", iso_reader.read_volume_descriptor(17 * 2048))
 List Contents: List all files and directories in the root directory or specify a path to list its contents.
