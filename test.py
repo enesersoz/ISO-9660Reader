@@ -3,6 +3,10 @@ from tkinter import filedialog, simpledialog
 
 class test:
     if __name__ == "__main__":
+        so_path = "iso/text.iso # We can use this line of code if dont want to select iso file with the help of Gui
+        print("Current Working Directory:", os.getcwd())
+        print("Is file exists:", os.path.exists(iso_path))  # Check if the file exists
+        
         # Create an instance of ISO9660Reader by selecting an ISO file with a GUI
         iso_reader = ISO9660Reader.select_iso_file()
 
