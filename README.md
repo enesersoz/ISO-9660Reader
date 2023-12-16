@@ -2,6 +2,11 @@ SO9660 Reader
 
 This Python script provides a basic ISO9660 reader that allows you to inspect and extract information from ISO9660 CD/DVD image files. It includes functionality to read volume descriptors, parse directories, list contents, and extract files from the ISO image.
 
+Requirements
+The script is written in Python and requires a Python interpreter to run.
+Ensure the struct module is available, which is part of the Python standard library.
+
+
 Usage
 Initialization: Provide the path to your ISO9660 file when creating an instance of the ISO9660Reader class.
 
