@@ -14,6 +14,8 @@ class test:
         iso_reader.list_contents("")
 
         # List contents of a specific directory
+        iso_reader.list_contents("path/to/your/directory")
+
         # Ask the user to select a file for extraction
         file_to_extract = ISO9660Reader.select_file()
         destination_folder = filedialog.askdirectory(title="Select Destination Folder")
