@@ -1,90 +1,80 @@
-import struct
 import os
 import tkinter as tk
-from tkinter import filedialog, simpledialog
+from tkinter import filedialog
+import struct
 
 class ISO9660Reader:
     def __init__(self, iso_path):
         self.iso_path = iso_path
-        self.volume_descriptor_size = 2048
-        self.joliet_supplementary_size = 2048
+        self.SECTOR_SIZE = 2048
 
     def read_volume_descriptor(self, offset):
-        with open(self.iso_path, 'rb') as iso_file:
-            iso_file.seek(offset)
-            raw_data = iso_file.read(struct.calcsize('>BB5s32sIHHHB32xQH'))
-            descriptor = struct.unpack('>BB5s32sIHHHB32xQH', raw_data)
-            return descriptor
+        try:
+            with open(self.iso_path, 'rb') as iso_file:
+                iso_file.seek(offset)
+                raw_data = iso_file.read(struct.calcsize('>BB5s32sIHHHB32xQH'))
+                print(f"Raw Data at Offset {offset}: {raw_data}")
+                if len(raw_data) != struct.calcsize('>BB5s32sIHHHB32xQH'):
+                    return None  # or raise specific exception
 
+                descriptor = struct.unpack('>BB5s32sIHHHB32xQH', raw_data)
+                print(f"Unpacked Descriptor: {descriptor}")
+                return descriptor
+        except struct.error as e:
+            raise ValueError(f"Error reading volume descriptor at offset {offset}: {e}")
+        except Exception as e:
+            raise ValueError(f"An unexpected error occurred while reading volume descriptor: {e}")
     def parse_volume_descriptor(self):
-        standard_extent = self.read_volume_descriptor(16 * 2048)[8]
-        joliet_extent = self.read_volume_descriptor(17 * 2048)[8]
-
-        print("Volume Descriptors:")
-        print(f"Standard Extent: {standard_extent}")
-        print(f"Joliet Extent: {joliet_extent}")
-
-        if joliet_extent != 0:
-            return joliet_extent
-        else:
-            return standard_extent
-
-    def print_volume_descriptor(self, label, descriptor):
-        """Print the details of a volume descriptor."""
-        print(f"\n{label} Volume Descriptor:")
-        print(f"  Type: {descriptor[0]}")
-        print(f"  Identifier: {descriptor[1]}")
-
-        # Decode System Identifier as ASCII
         try:
-            system_identifier = descriptor[2].decode('ascii').rstrip()
-            print(f"  System Identifier: {system_identifier}")
-        except UnicodeDecodeError:
-            print("  System Identifier: (Unable to decode as ASCII)")
+            standard_extent = self.read_volume_descriptor(16 * self.SECTOR_SIZE)
+            if standard_extent is None or len(standard_extent) < 9 or standard_extent[8] == 0:
+                raise ValueError("Error: Unable to read a valid standard volume descriptor.")
 
-        # Decode Volume Identifier as ASCII
-        try:
-            volume_identifier = descriptor[3].decode('ascii').rstrip()
-            print(f"  Volume Identifier: {volume_identifier}")
-        except UnicodeDecodeError:
-            print("  Volume Identifier: (Unable to decode as ASCII)")
+            joliet_extent = self.read_volume_descriptor(17 * self.SECTOR_SIZE)
+            print("Volume Descriptors:")
+            print(f"Standard Extent: {standard_extent[8]}")
+            print(f"Joliet Extent: {joliet_extent[8] if joliet_extent else 'N/A'}")
 
-        # Handle Volume Set Identifier as an integer
-        if len(descriptor) > 9:
-            print(f"  Volume Set Identifier: {descriptor[9]}")
-
-        # Check for the existence of the rest of the fields
-        if len(descriptor) > 12:
-            # Continue with the rest of the fields
-            print(f"  Total LBA: {descriptor[4]}")
-            print(f"  Block Size: {descriptor[5]}")
-            print(f"  Path Table Size: {descriptor[6]}")
-            print(f"  Path Table LBA: {descriptor[7]}")
-            print(f"  Root Directory Record: {descriptor[8]}")
-            print(f"  Volume Sequence Number: {descriptor[10]}")
-            print(f"  Logical Block Size: {descriptor[11]}")
-            print(f"  Path Table Size (Optional): {descriptor[12]}")
-        else:
-            print("  (Additional fields not available)")
+            if joliet_extent is None or len(joliet_extent) < 9:
+                return standard_extent[8]
+            else:
+                return joliet_extent[8]
+        except ValueError as ve:
+            raise ve
+        except Exception as e:
+            raise ValueError(f"An unexpected error occurred while parsing volume descriptor: {e}")
 
     def read_directory_record(self, offset):
-        with open(self.iso_path, 'rb') as iso_file:
-            iso_file.seek(offset)
-            raw_data = iso_file.read(struct.calcsize('>BBB7sII7sBB32s'))
-            record = struct.unpack('>BBB7sII7sBB32s', raw_data)
-            return record
+        try:
+            if offset is None:
+                raise ValueError("Invalid offset. Volume descriptor might be missing or corrupted.")
+
+            with open(self.iso_path, 'rb') as iso_file:
+                iso_file.seek(offset)
+                raw_data = iso_file.read(struct.calcsize('>BBB7sII7sBB32s'))
+                print(f"Raw Data at Offset {offset}: {raw_data}")
+
+                if len(raw_data) != struct.calcsize('>BBB7sII7sBB32s'):
+                    return None  # or raise specific exception
+
+                record = struct.unpack('>BBB7sII7sBB32s', raw_data)
+                return record
+        except struct.error as e:
+            raise ValueError(f"Error reading directory record at offset {offset}: {e}")
+        except Exception as e:
+            raise ValueError(f"An unexpected error occurred while reading directory record: {e}")
 
     def parse_directory(self, extent):
         records = []
-        current_offset = extent
-
-        while True:
-            record = self.read_directory_record(current_offset)
-            if record[0] == 0:
-                break  # Terminator record
-
-            records.append(record)
-            current_offset += record[8]
+        for offset in range(extent, extent + self.SECTOR_SIZE, self.SECTOR_SIZE):
+            try:
+                record = self.read_directory_record(offset)
+                if record and None not in record:  # Skip records with None values
+                    records.append(record)
+            except Exception as e:
+                # Log the exception and continue to the next record
+                print(f"Error processing record at offset {offset}: {e}")
+                pass  # Add this line to suppress the error message for skipped records
 
         return records
 
@@ -128,81 +118,11 @@ class ISO9660Reader:
             if record[0] == 0x02:
                 continue  # Skip hidden directories
 
-            entry_name = os.fsdecode(record[7]).strip('\0')
+            entry_name = os.fsdecode(record[7]).rstrip('\0')  # Remove trailing null characters
+            entry_name_str = entry_name if isinstance(entry_name, str) else entry_name.decode('utf-8', 'ignore')
+
             if record[1] & 0x02:
-                print(f"{indent}{entry_name} (directory)")
+                print(f"{indent}{entry_name_str} (directory)")
             else:
-                print(f"{indent}{entry_name} (file)")
+                print(f"{indent}{entry_name_str} (file)")
 
-    def extract_file(self, file_path, destination=None):
-        root_extent = self.parse_volume_descriptor()
-        records = self.parse_directory(root_extent)
-
-        # Normalize file path for case-insensitive comparison
-        file_path = os.path.normpath(file_path)
-
-        for record in records:
-            # Normalize directory entry for case-insensitive comparison
-            entry_path = os.fsdecode(record[7]).strip('\0')
-            entry_path = os.path.normpath(entry_path)
-
-            if entry_path.lower() == file_path.lower():
-                if record[1] & 0x02:
-                    print("Error: Specified path is a directory. Use 'list_contents' to view its contents.")
-                    return
-                else:
-                    data_extent = record[10]
-
-                    # Check if destination is specified
-                    if destination:
-                        destination = os.path.normpath(destination)
-                        destination_path = os.path.join(destination, os.path.basename(file_path))
-                        with open(destination_path, 'wb') as output_file:
-                            with open(self.iso_path, 'rb') as iso_file:
-                                iso_file.seek(data_extent)
-                                data = iso_file.read(record[4])
-                                output_file.write(data)
-                        print(f"\nFile '{entry_path}' extracted successfully to '{destination_path}'.")
-                        return
-                    else:
-                        # Print file data
-                        with open(self.iso_path, 'rb') as iso_file:
-                            iso_file.seek(data_extent)
-                            data = iso_file.read(record[4])
-                            print(f"\nFile '{entry_path}' content:")
-                            print(data)
-
-        print(f"Error: File '{file_path}' not found.")
-
-    @classmethod
-    def select_iso_file(cls):
-        # Create a Tkinter root window (hidden)
-        root = tk.Tk()
-        root.withdraw()  # Hide the main window
-
-        # Ask the user to select an ISO file using a file dialog
-        iso_path = filedialog.askopenfilename(title="Select ISO File", filetypes=[("ISO files", "*.iso")])
-
-        # Check if the user selected a file
-        if not iso_path:
-            print("No file selected. Exiting.")
-            exit()
-
-        print("Selected ISO Path:", iso_path)
-
-        # Provide the selected ISO path to the ISO9660Reader constructor
-        return cls(iso_path)
-
-    @classmethod
-    def select_file(cls):
-        # Ask the user to select a file using a file dialog
-        file_path = filedialog.askopenfilename(title="Select File")
-
-        # Check if the user selected a file
-        if not file_path:
-            print("No file selected. Exiting.")
-            exit()
-
-        print("Selected File Path:", file_path)
-
-        return file_path
